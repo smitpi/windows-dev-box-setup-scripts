@@ -22,86 +22,276 @@ function executeScript {
 	iex ((new-object net.webclient).DownloadString("$helperUri/$script"))
 }
 #>
+function Set-LabSettingsOnly {
+    #region Lab settings
+    #region bginfo
+    $checkver = Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object caption
+    if ($checkver -like '*server*') {
+        try {
+            Write-Host '[Importing]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'BGInfo' -ForegroundColor Cyan
+            Install-BGInfo -RunBGInfo 
+        } catch {Write-Warning "Error: `nMessage:$($_.Exception.Message)`nItem:$($_.Exception.ItemName)"}
+    }
+    #endregion
 
-#
-# Connect to the lab utils folder
-####################################
-if ((Test-Path -Path C:\Utils) -eq $false) { New-Item -Path C:\Utils -ItemType Directory -Force -ErrorAction SilentlyContinue }
-if ((Test-Path C:\Utils\LabScripts) -and ($null -eq (Get-Item C:\Utils\LabScripts).LinkType)) {
-Rename-Item -Path   C:\Utils\LabScripts -NewName  C:\Utils\LabScripts-old
-}
-if (!(Test-Path C:\Utils\LabScripts)) {
-New-Item -ItemType SymbolicLink -Name LabScripts -Path C:\Utils -Value '\\dfnas.internal.lab\Profile\Utils\LabScripts'
-}
+    #region ssh
+    Write-Host '[Importing]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'SSH Config' -ForegroundColor Cyan
+    Write-Host 'SSH' -ForegroundColor red
+    $Exe = 'robocopy'
+    $Param = @("\\dfnas\profile\Utils\LabScripts\Private\App_Setup\ssh $env:USERPROFILE\.ssh /W:0 /R:0 /W:0 /R:0 /NJH /NJS")
+    $ParamS = $Param.Split(' ')
+    & "$Exe" $ParamS
+    #endregion
 
-if ((Test-Path C:\Utils\PSModules) -and ($null -eq (Get-Item C:\Utils\PSModules).LinkType)) {
-Rename-Item -Path   C:\Utils\PSModules -NewName  C:\Utils\PSModules-old
-}
-if (!(Test-Path C:\Utils\PSModules)) {
-New-Item -ItemType SymbolicLink -Name PSModules -Path C:\Utils -Value '\\dfnas.internal.lab\Profile\Utils\PSModules'
-}
-
-
-#
-# Installing needed modules
-####################################
-Write-Host '[Installing]: ' -NoNewline -ForegroundColor Cyan; Write-Host 'Needed Powershell modules' -ForegroundColor Yellow
-
-$mods = @('ImportExcel', 'PSWriteHTML', 'PSWriteColor', 'PSScriptTools', 'PoshRegistry')
-$mods | ForEach-Object {
-$fullmod = get-module $_
-if ($null -like $fullmod) {$fullmod = get-module $_ -ListAvailable}
-if ($null -like $fullmod) {Install-Module -name $_ -AllowClobber -Scope AllUsers}
-
-}
-
-Get-ChildItem C:\Utils\PSModules\*.psm1 -Recurse | ForEach-Object {
-    Write-Host '[Importing]: ' -NoNewline -ForegroundColor Cyan; Write-Host $($_.FullName) -ForegroundColor Yellow
-    Import-Module -Global -FullyQualifiedName $_.FullName -Force
+    #region Windows terminal
+    if (Test-Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe") {
+        try {
+            Write-Host '[Importing]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Windows Terminal Preview Config' -ForegroundColor Cyan
+            Remove-Item -Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json" -ErrorAction SilentlyContinue
+            $Exe = 'robocopy'
+            $Param = @("\\dfnas\profile\Utils\LabScripts\Private\App_Setup\WindowsTerminal $env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState /IF *.json /mir /NJH /NJS")
+            $ParamS = $Param.Split(' ')
+            & "$Exe" $ParamS
+        } catch { Write-Warning 'Does not exist' }
     }
 
-#--- Enable developer mode on the system ---
-Set-ItemProperty -Path HKLM:\Software\Microsoft\Windows\CurrentVersion\AppModelUnlock -Name AllowDevelopmentWithoutDevLicense -Value 1
+    if (Test-Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe") {
+        try {
+            Write-Host '[Importing]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Windows Terminal Config' -ForegroundColor Cyan
+            Remove-Item -Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json" -ErrorAction SilentlyContinue
+            $Exe = 'robocopy'
+            $Param = @("\\dfnas\profile\Utils\LabScripts\Private\App_Setup\WindowsTerminal $env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState /IF *.json /mir /NJH /NJS")
+            $ParamS = $Param.Split(' ')
+            & "$Exe" $ParamS
+        } catch { Write-Warning 'Does not exist' }
+    }
+    #endregion
 
-#--- Configuring Windows properties ---
-#--- Windows Features ---
-# Show hidden files, Show protected OS files, Show file extensions
-Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions
+    #region pslauncher
+    Write-Host '[Installing]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'PSLauncher' -ForegroundColor Cyan
+    $ps5Folder = [IO.Path]::Combine([Environment]::GetFolderPath('MyDocuments'), 'WindowsPowerShell', 'Scripts')
+    if (-not(Test-Path $ps5Folder)) {
+        $psfolder = New-Item -Path $ps5Folder -ItemType Directory -Force
+    } else {$psfolder = Get-Item $ps5Folder}
 
-#--- File Explorer Settings ---
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ServerAdminUI -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name Hidden -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowCompColor -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name HideFileExt -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name DontPrettyPath -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowInfoTip -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name HideIcons -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name MapNetDrvBtn -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name WebView -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name Filter -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowSuperHidden -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name SeparateProcess -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name AutoCheckSelect -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name IconsOnly -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowTypeOverlay -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowStatusBar -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name StoreAppsOnTaskbar -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ListviewAlphaSelect -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ListviewShadow -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name TaskbarAnimations -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowCortanaButton -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name StartMigratedBrowserPin -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ReindexedProfile -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name StartMenuAdminTools -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name LaunchTo -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name UseCompactMode -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name StartShownOnUpgrade -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name TaskbarSizeMove -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name DisablePreviewDesktop -Value 0
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name FolderContentsInfoTip -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowEncryptCompressedColor -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name ShowSecondsInSystemClock -Value 1
-Set-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced -Name SnapAssist -Value 1
+
+    Remove-Item (Join-Path -Path $psfolder.FullName -ChildPath '\PSLauncher.ps1') -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path -Path $psfolder.FullName -ChildPath '\PSSysTrayLauncher.ps1') -Force -ErrorAction SilentlyContinue
+
+    $PSLauncher = New-Item -Path (Join-Path -Path $psfolder.FullName -ChildPath '\PSLauncher.ps1') -ItemType File -Value 'Start-PSLauncher -ConfigFilePath \\dfnas\profile\Utils\LabScripts\Private\App_Setup\PSLauncher\PSLauncherConfig.json'
+    $PSSysTrayLauncher = New-Item -Path (Join-Path -Path $psfolder.FullName -ChildPath '\PSSysTrayLauncher.ps1') -ItemType File -Value 'Start-PSSysTrayLauncher -ConfigFilePath \\dfnas\profile\Utils\LabScripts\Private\App_Setup\PSLauncher\PSLauncherConfig.json'
+    $PS_SysTray = New-Item -Path (Join-Path -Path $psfolder.FullName -ChildPath '\PS_SysTray.ps1') -ItemType File -Value 'Start-PS_CSV_SysTray -ConfigFilePath \\dfnas\Profile\Utils\LabScripts\Private\App_Setup\PSLauncher\PS_CSV_SysTrayConfig.csv'
+    #endregion
+
+    #region delete icons
+    Write-Host '[Deleting]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Old icons' -ForegroundColor Cyan
+    $LFolder = [IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'Lab Tools')
+    Remove-Item "$ps5Folder\*.lnk" -Force -ErrorAction SilentlyContinue
+    Remove-Item "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\*.lnk" -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "$([Environment]::GetFolderPath('Desktop'))\*.lnk" -ErrorAction SilentlyContinue
+    Remove-Item $LFolder -Recurse -Force -ErrorAction SilentlyContinue
+    #endregion
+
+    #region ElevatedShortcut
+    Write-Host '[Installing]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'ElevatedShortcuts' -ForegroundColor Cyan
+    if (Get-ScheduledTask -TaskPath '\RunAs\' -ErrorAction SilentlyContinue) {Get-ScheduledTask -TaskPath '\RunAs\' | Unregister-ScheduledTask -Confirm:$false}
+    New-ElevatedShortcut -ShortcutName PSLauncher -FilePath $PSLauncher.FullName | Out-Null
+    New-ElevatedShortcut -ShortcutName PS_SysTray -FilePath $PS_SysTray.FullName | Out-Null
+    New-ElevatedShortcut -ShortcutName PSSysTrayLauncher -FilePath $PSSysTrayLauncher.FullName | Out-Null
+    if (Get-Command wt.exe -ErrorAction SilentlyContinue) {New-ElevatedShortcut -ShortcutName Terminal -FilePath 'C:\Users\ps\AppData\Local\Microsoft\WindowsApps\wt.exe' | Out-Null}
+    New-ElevatedShortcut -ShortcutName 'CommandPrompt' -FilePath 'C:\Windows\System32\cmd.exe' | Out-Null
+    New-ElevatedShortcut -ShortcutName 'PSISE' -FilePath 'C:\Windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe' | Out-Null
+    New-ElevatedShortcut -ShortcutName 'WindowsPowershell' -FilePath 'C:\Windows\system32\WindowsPowerShell\v1.0\PowerShell.exe' | Out-Null
+    if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) {New-ElevatedShortcut -ShortcutName 'Powershell' -FilePath 'C:\Program Files\PowerShell\7\pwsh.exe' | Out-Null}
+    if (Test-Path 'C:\Program Files\Microsoft VS Code\Code.exe') {New-ElevatedShortcut -ShortcutName 'VSCode' -FilePath 'C:\Program Files\Microsoft VS Code\Code.exe' | Out-Null}
+    #endregion
+
+    #region Shortcuts
+    Write-Host '[Creating]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Shortcuts folder' -ForegroundColor Cyan
+
+    $Labtools = New-Item $LFolder -ItemType Directory -Force 
+
+    if (-not(Test-Path "$env:ProgramFiles\PSToolKit\icons")) {New-Item -Path "$env:ProgramFiles\PSToolKit\icons" -ItemType Directory | Out-Null}
+    Copy-Item -Path '\\dfnas\Profile\Utils\LabScripts\Private\ico\pool\*.ico' -Destination "$env:ProgramFiles\PSToolKit\icons" -Force
+
+    #Copy-Item (Join-Path -Path $psfolder.FullName -ChildPath '\PSSysTrayLauncher.lnk') -Destination "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup" -Force
+
+
+    #Copy-Item "$ps5Folder\*.lnk" -Destination $Labtools.FullName -Force
+    Move-Item 'C:\Windows\System32\CommandPrompt.lnk' -Destination $Labtools.FullName -Force
+    Move-Item 'C:\Program Files\PowerShell\7\Powershell.lnk' -Destination $Labtools.FullName -Force
+    Move-Item 'C:\Windows\System32\WindowsPowerShell\v1.0\PSISE.lnk' -Destination $Labtools.FullName -Force
+    Move-Item 'C:\Windows\System32\WindowsPowerShell\v1.0\WindowsPowershell.lnk' -Destination $Labtools.FullName -Force
+    if (Test-Path 'C:\Program Files\Microsoft VS Code\Code.exe') {Move-Item 'C:\Program Files\Microsoft VS Code\VSCode.lnk' -Destination $Labtools.FullName -Force}
+
+    # $WScriptShell = New-Object -ComObject WScript.Shell
+    # $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\StartUp Folder.lnk'))
+    # $Shortcut.TargetPath = 'explorer.exe'
+    # $Shortcut.Arguments = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+    # $Shortcut.Save()
+
+    # $WScriptShell = New-Object -ComObject WScript.Shell
+    # $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\App Setup Folder.lnk'))
+    # $Shortcut.TargetPath = 'explorer.exe'
+    # $Shortcut.Arguments = '\\dfnas\Profile\Utils\LabScripts\Private\App_Setup'
+    # $Shortcut.Save()
+
+    # $WScriptShell = New-Object -ComObject WScript.Shell
+    # $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\AdminTools.lnk'))
+    # $Shortcut.TargetPath = 'explorer.exe'
+    # $Shortcut.Arguments = '\\vulcan.internal.lab\SharedProfile\CloudStorage\Dropbox\#Profile\AdminTools'
+    # $Shortcut.Save()
+
+    # $WScriptShell = New-Object -ComObject WScript.Shell
+    # $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\Downloads.lnk'))
+    # $Shortcut.TargetPath = 'explorer.exe'
+    # $Shortcut.Arguments = '\\vulcan.internal.lab\SharedProfile\Download'
+    # $Shortcut.Save()
+
+    # $WScriptShell = New-Object -ComObject WScript.Shell
+    # $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\AllUsers Modules.lnk'))
+    # $Shortcut.TargetPath = 'explorer.exe'
+    # $Shortcut.Arguments = 'C:\Program Files\WindowsPowerShell\Modules'
+    # $Shortcut.Save()
+
+    if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
+        $WScriptShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\Terminal.lnk'))
+        $Shortcut.TargetPath = 'C:\Windows\System32\schtasks.exe'
+        $Shortcut.Arguments = '/run /tn RunAs\Terminal'
+        $Shortcut.IconLocation = "$env:ProgramFiles\PSToolKit\icons\pool-8.ico"
+        $Shortcut.Save()
+    }
+
+    if (Test-Path 'C:\Program Files\PSToolKit\BGInfo') {
+        $WScriptShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\BGInfo.lnk'))
+        $Shortcut.TargetPath = 'C:\Program Files\PSToolKit\BGInfo\Bginfo64.exe' 
+        $Shortcut.Arguments = '"C:\Program Files\PSToolKit\BGInfo\PSToolKit.bgi" /timer:0 /nolicprompt'
+        $Shortcut.IconLocation = 'C:\Program Files\PSToolKit\icons\pool-13.ico'
+        $Shortcut.Save()
+    }
+
+        $WScriptShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\PSSysTrayLauncher.lnk'))
+        $Shortcut.TargetPath = 'C:\Windows\System32\schtasks.exe' 
+        $Shortcut.Arguments = '/run /tn RunAs\PSSysTrayLauncher'
+        $Shortcut.IconLocation = 'C:\Program Files\PSToolKit\icons\pool-2.ico'
+        $Shortcut.Save()
+   
+        $WScriptShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\PSLauncher.lnk'))
+        $Shortcut.TargetPath =  'C:\Windows\System32\schtasks.exe' 
+        $Shortcut.Arguments = '/run /tn RunAs\PSLauncher'
+        $Shortcut.IconLocation = 'C:\Program Files\PSToolKit\icons\pool-3.ico'
+        $Shortcut.Save()
+    
+        $WScriptShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WScriptShell.CreateShortcut((Join-Path -Path $Labtools.FullName -ChildPath '\PS_SysTray.lnk'))
+        $Shortcut.TargetPath = 'C:\Windows\System32\schtasks.exe'  
+        $Shortcut.Arguments = '/run /tn RunAs\PS_SysTray'
+        $Shortcut.IconLocation = 'C:\Program Files\PSToolKit\icons\pool-4.ico'
+        $Shortcut.Save()
+    
+    If ((Get-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run').Property -contains 'PSSysTrayLauncher') {
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'PSSysTrayLauncher' -Value 'C:\Windows\System32\schtasks.exe /run /tn RunAs\PSSysTrayLauncher' | Out-Null
+    } Else {
+        New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'PSSysTrayLauncher' -PropertyType 'string' -Value 'C:\Windows\System32\schtasks.exe /run /tn RunAs\PSSysTrayLauncher' | Out-Null}
+
+    If ((Get-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run').Property -contains 'PS_SysTray') {
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'PS_SysTray' -Value 'C:\Windows\System32\schtasks.exe /run /tn RunAs\PS_SysTray' | Out-Null
+    } Else {
+        New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'PS_SysTray' -PropertyType 'string' -Value 'C:\Windows\System32\schtasks.exe /run /tn RunAs\PS_SysTray' | Out-Null}
+
+    if (Test-Path 'D:\SharedProfile\CloudStorage\Dropbox\#Profile\AdminTools\Start.exe') {
+        If ((Get-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run').Property -contains 'PortableApps') {
+            Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'PortableApps' -Value 'D:\SharedProfile\CloudStorage\Dropbox\#Profile\AdminTools\Start.exe' | Out-Null
+        } Else {
+            New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'PortableApps' -PropertyType 'string' -Value 'D:\SharedProfile\CloudStorage\Dropbox\#Profile\AdminTools\Start.exe' | Out-Null}
+    }
+
+ 
+    $DesktopIni = @'
+[.ShellClassInfo]
+IconResource=C:\Program Files\PSToolKit\icons\pool-3.ico,0
+'@
+
+    #Create/Add content to the desktop.ini file
+    if (Test-Path (Join-Path -Path $Labtools.FullName -ChildPath '\desktop.ini')) {Remove-Item (Join-Path -Path $Labtools.FullName -ChildPath '\desktop.ini') -Force -ErrorAction SilentlyContinue}
+    $newini = New-Item -Path (Join-Path -Path $Labtools.FullName -ChildPath '\desktop.ini') -ItemType File -Value $DesktopIni
+  
+    #Set the attributes for $DesktopIni
+    $newini.Attributes = 'Hidden, System, Archive'
+ 
+    #Finally, set the folder's attributes
+    $Labtools.Attributes = 'ReadOnly, Directory'
+    #endregion
+
+    #region Update Local Modules
+    Write-Host '[Checking]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'My Modules Versions' -ForegroundColor Cyan
+
+    'CTXCloudApi', 'PSLauncher', 'XDHealthCheck', 'PSConfigFile' | ForEach-Object {
+        $CheckMod = $_
+        Write-Host "`t[Checking]: " -NoNewline -ForegroundColor Yellow; Write-Host "$($CheckMod)" -ForegroundColor Cyan
+
+        Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Initial] Checking Nas Ver"
+        $NasMod = (Get-ChildItem -Directory "\\dfnas\Profile\Utils\PSModules\$($CheckMod)" | Sort-Object -Property Name -Descending)[0]
+        [version]$NasModver = $NasMod.Name
+
+        try {
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Initial] Checking Local Ver"
+            $LocalMod = (Get-ChildItem -Directory "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)" -ErrorAction Stop | Sort-Object -Property Name -Descending)[0].Name
+        } catch {
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Creating] Local Dir"
+            New-Item -Path "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)" -ItemType Directory -Force | Out-Null
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Copy] first instance"
+            Copy-Item -Path $NasMod.FullName -Destination "C:\Program Files\WindowsPowerShell\Modules\$($ModuleName)\" -Force -Recurse
+            $LocalMod = (Get-ChildItem -Directory "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)" -ErrorAction Stop | Sort-Object -Property Name -Descending)[0].Name
+        }
+        [version]$LocalModVer = $LocalMod.Name
+
+        if ($LocalModVer -lt $NasModver) {
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Creating] backup zip"
+            Get-ChildItem -Directory "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)" | Compress-Archive -DestinationPath "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)\$($CheckMod)-bck.zip" -Update
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Remove] Old Dir"
+            Get-ChildItem -Directory "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)" | Remove-Item -Recurse -Force
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Copy] New dir"
+            Copy-Item -Path $NasMod.FullName -Destination "C:\Program Files\WindowsPowerShell\Modules\$($CheckMod)\" -Force -Recurse
+            Write-Verbose "$((Get-Date -Format HH:mm:ss).ToString()) [Complete]"
+        }
+    }
+    #endregion
+    #endregion
+
+    Invoke-PSConfigFile -ConfigFile '\\vulcan.internal.lab\SharedProfile\CloudStorage\PSCustomConfig.json' -DisplayOutput
+    Set-PSConfigFileExecution -PSProfile RemoveScript
+    Set-PSConfigFileExecution -PSProfile AddScript
+
+    Write-Host '[Update]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Complete' -ForegroundColor Green
+    Start-Sleep 30
+}
+
+$web = New-Object System.Net.WebClient
+$web.DownloadFile('https://bit.ly/35sEu2b', "$($env:TEMP)\Start-PSToolkitSystemInitialize.ps1")
+$full = Get-Item "$($env:TEMP)\Start-PSToolkitSystemInitialize.ps1"
+Import-Module $full.FullName -Force
+Start-PSToolkitSystemInitialize -LabSetup -InstallMyModules
+Remove-Item $full.FullName
+
+Set-LabSettingsOnly
+
+#region Other Settings
+Write-Host '[Set]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Other Config' -ForegroundColor Cyan
+Add-ChocolateyPrivateRepo -RepoName ProGet -RepoURL "http://progetserver.internal.lab/nuget/htpcza-choco" -Priority 1 -RepoApiKey "72dd0bb9ae376d6253ec16acb3805e6810a41551"
+Invoke-PSConfigFile -ConfigFile "\\vulcan.internal.lab\SharedProfile\CloudStorage\PSCustomConfig.json" -DisplayOutput
+Set-PSConfigFileExecution -PSProfile RemoveScript
+Set-PSConfigFileExecution -PSProfile AddScript
+Set-PSToolKitSystemSettings -RunAll
+#endregion
+
+Write-Host " "
+Write-Host '[Complete]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'All Tasks' -ForegroundColor DarkRed
+Start-Sleep 30
 
 #--- Uninstall unnecessary applications that come with Windows out of the box ---
 Write-Host "Uninstall some applications that come with Windows out of the box" -ForegroundColor "Yellow"
@@ -160,17 +350,6 @@ $applicationList = @(
 foreach ($app in $applicationList) {
     removeApp $app
 }
-
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-Write-Color "[Installing] ","ChocolateyClient: ","Complete" -Color Cyan,Yellow,Green
-
-Set-PrivateRepositoryConfigFiles -Source Module
-#Install-ChocolateyApps -BaseApps
-Set-PrivateRepositorySystemSettings -RunAll
-Install-PSModules -BaseModules
-Install-PS7
-
 
 
 Enable-UAC
