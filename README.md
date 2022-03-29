@@ -44,6 +44,7 @@ To run a recipe script, click a link in the table below from your target machine
 |<a href='http://boxstarter.org/package/url?https://raw.githubusercontent.com/Microsoft/windows-dev-box-setup-scripts/master/dev_ml_wsl.ps1'>Machine Learning Linux</a>| Machine Learning with Linux tools running on WSL        |
 |<a href='http://boxstarter.org/package/url?https://raw.githubusercontent.com/Microsoft/windows-dev-box-setup-scripts/master/devops_azure.ps1'>DevOps Azure</a>| Client setup for DevOps with Azure      |
 |<a href='http://boxstarter.org/package/url?https://raw.githubusercontent.com/smitpi/windows-dev-box-setup-scripts/master/lab_setup.ps1'>HomeLab</a>| My Lab Test Setup      |
+|<a href='http://boxstarter.org/package/url?http://192.168.10.30:8077/PSToolKit/Start-Initial.ps1'>Lab-Build</a> | Self Hosted Lab Build |
 |     | Xamarin (Visual Studio, Xamarin, Android SDK) |
 |     | Containers (Docker, Kubernetes, etc...)        |
 |     | Submit a PR with a recommended configuration!        |
