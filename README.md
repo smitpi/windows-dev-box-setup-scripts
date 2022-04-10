@@ -44,12 +44,13 @@ To run a recipe script, click a link in the table below from your target machine
 |<a href='http://boxstarter.org/package/url?https://raw.githubusercontent.com/Microsoft/windows-dev-box-setup-scripts/master/dev_ml_wsl.ps1'>Machine Learning Linux</a>| Machine Learning with Linux tools running on WSL        |
 |<a href='http://boxstarter.org/package/url?https://raw.githubusercontent.com/Microsoft/windows-dev-box-setup-scripts/master/devops_azure.ps1'>DevOps Azure</a>| Client setup for DevOps with Azure      |
 |<a href='http://boxstarter.org/package/url?https://raw.githubusercontent.com/smitpi/windows-dev-box-setup-scripts/master/lab_setup.ps1'>HomeLab</a>| My Lab Test Setup      |
-|<a href='http://boxstarter.org/package/url?http://192.168.10.30:8077/PSToolKit/Start-Initial.ps1'>Lab-Build</a> | Self Hosted Lab Build |
-|     | Xamarin (Visual Studio, Xamarin, Android SDK) |
-|     | Containers (Docker, Kubernetes, etc...)        |
-|     | Submit a PR with a recommended configuration!        |
+|                                                              |                                                              |
+|     |                                                              |
+|                                                              |                                                              |
+| <a href='http://boxstarter.org/package/url?http://192.168.10.42:8077/PSToolKit/Start-Initial.ps1'>Lab-Build</a> | Self Hosted Lab Build                                        |
 
 **Notes:**  
+
 1. If you are using WSL there's a followup step we recommend after running the setup script.  When the script finishes you will only have a root user with a blank password. You should  manually create a non-root user via `$ sudo adduser [USERNAME] sudo` 
 with a non-blank password. Use this user going forward. For more info on WSL please refer to the [documentation](https://docs.microsoft.com/en-us/windows/wsl/about).
 2. If you're a Node.js contributor working on Node.js core, please see the [Node.js Bootstrapping Guide](https://github.com/nodejs/node/tree/master/tools/bootstrap) or [click here to run](http://boxstarter.org/package/nr/url?https://raw.githubusercontent.com/nodejs/node/master/tools/bootstrap/windows_boxstarter).
