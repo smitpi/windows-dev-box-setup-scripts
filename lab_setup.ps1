@@ -1,3 +1,86 @@
+
+### HACK Workaround choco / boxstarter path too long error
+## https://github.com/chocolatey/boxstarter/issues/241
+$ChocoCachePath = "$env:USERPROFILE\AppData\Local\Temp\chocolatey"
+New-Item -Path $ChocoCachePath -ItemType Directory -Force
+$cup = 'choco upgrade --cacheLocation="$ChocoCachePath"'
+
+######################################
+#### make sure we're not bothered ####
+######################################
+
+Disable-UAC
+
+# Allow running PowerShell scripts
+Update-ExecutionPolicy Unrestricted
+
+$Boxstarter.RebootOk=$true
+
+function Join-ServerDomain {
+	PARAM(
+		[Parameter(Mandatory = $true, Position = 0)]
+		[string]$ServerName,
+        [string]$DomainName = 'internal.lab',
+        [pscredential]$DomainCred = (Get-Credential -Message "Creds to add to domain")
+)
+
+    try {
+    Write-Host '[Checking]: ' -NoNewline -ForegroundColor Yellow; Write-Host 'Current Domain Settings' -ForegroundColor Cyan
+    $domainCheck = [System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()
+	}catch {$domainCheck = $null}
+    
+
+    if (([bool]$domainCheck -eq $true) -and ($domainCheck.name -notlike $domainname)) {
+        Write-Host '[Removing]: ' -NoNewline -ForegroundColor Yellow; Write-Host "$($env:COMPUTERNAME) from: " -ForegroundColor Cyan -NoNewline;  Write-Host "$($domainCheck.name)" -ForegroundColor DarkRed
+        Write-Warning "Reboot is required. Rerun the script after the reboot."
+        Remove-Computer -UnjoinDomainCredential $localcred -LocalCredential $localcred -Restart -Force
+    }
+    elseif ($env:COMPUTERNAME -notlike $Servername) {
+        Write-Host '[Renaming]: ' -NoNewline -ForegroundColor Yellow; Write-Host "$($env:COMPUTERNAME) to: " -ForegroundColor Cyan -NoNewline;  Write-Host "$($ServerName)" -ForegroundColor DarkRed
+        Write-Warning "Reboot is required. Rerun the script after the reboot."
+        Rename-Computer -ComputerName $env:COMPUTERNAME -NewName $ServerName;Start-Sleep 5
+    }
+    else {
+        Write-Host '[Adding]: ' -NoNewline -ForegroundColor Yellow; Write-Host "$($env:COMPUTERNAME) to: " -ForegroundColor Cyan -NoNewline;  Write-Host "$($DomainName)" -ForegroundColor DarkRed
+        Write-Warning "Reboot is required."
+        Add-Computer -DomainName $DomainName -Credential $cred -Options JoinWithNewName,AccountCreate -Force -Restart
+    }
+}
+
+# Check if we're on a domain, and exit if not
+
+If (!(Get-CimInstance -Class Win32_ComputerSystem).PartOfDomain) {
+    Write-Host -ForegroundColor Red "This machine is not part of a domain. Please take care of that first, and then run this script again."
+    $encSecret = ('aazz') | ConvertTo-SecureString -Force -AsPlainText
+	$labcred = New-Object System.Management.Automation.PSCredential ('lab\ps', $encSecret)
+    
+    Join-ServerDomain -ServerName "New-box-$(Get-Random)" -DomainCred $labcred
+}
+
+
+# Fix up some Windows and Powershell things
+
+Set-CornerNavigationOptions -EnableUsePowerShellOnWinX
+Set-StartScreenOptions -EnableBootToDesktop -EnableDesktopBackgroundOnStart -EnableShowAppsViewOnStartScreen -EnableSearchEverywhereInAppsView
+Set-WindowsExplorerOptions -EnableShowFileExtensions -EnableShowHiddenFilesFoldersDrives
+Enable-PSRemoting -Force
+Enable-RemoteDesktop
+
+
+# Set up an all users/all hosts Powershell profile
+
+Write-Output '$console = $host.UI.RawUI' | Out-File -FilePath $profile.AllUsersAllHosts
+Write-Output '$buffer = $console.BufferSize' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$buffer.Width = 160' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$buffer.Height = 9999' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$console.BufferSize = $buffer' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$size = $console.WindowSize' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$size.Width = 160' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$size.Height = 80' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output '$console.WindowSize = $size' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+Write-Output 'Clear-Host' | Out-File -FilePath $profile.AllUsersAllHosts -Append
+
+
 # Description: Boxstarter Script
 # Author: Microsoft
 # Common dev settings for machine learning using only Windows native tools
