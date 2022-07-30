@@ -18,7 +18,6 @@ function removeApp {
 $applicationList = @(
 	"Microsoft.BingFinance"
 	"Microsoft.3DBuilder"
-	"Microsoft.BingFinance"
 	"Microsoft.BingNews"
 	"Microsoft.BingSports"
 	"Microsoft.BingWeather"
@@ -45,8 +44,8 @@ $applicationList = @(
 	"Microsoft.Print3D"
 	"*Autodesk*"
 	"*BubbleWitch*"
-    "king.com*"
-    "G5*"
+    	"king.com*"
+    	"G5*"
 	"*Dell*"
 	"*Facebook*"
 	"*Keeper*"
